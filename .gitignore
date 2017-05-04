@@ -5,3 +5,8 @@ logging.conf
 *.sw*
 build
 dist
+
+tiles
+env
+toi.txt
+fqueue

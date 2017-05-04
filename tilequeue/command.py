@@ -359,7 +359,7 @@ def tilequeue_intersect(cfg, peripherals):
     expired_tile_files_cap = 20
     file_names = file_names[:expired_tile_files_cap]
     expired_tile_paths = [os.path.join(cfg.intersect_expired_tiles_location, x)
-                          for x in file_names]
+                            for x in file_names]
 
     logger.info('Fetching tiles of interest ...')
     tiles_of_interest = peripherals.redis_cache_index.fetch_tiles_of_interest()
@@ -415,7 +415,7 @@ def tilequeue_intersect(cfg, peripherals):
 def make_store(store_type, store_name, cfg):
     if store_type == 'directory':
         from tilequeue.store import make_tile_file_store
-        return make_tile_file_store(store_name)
+        return make_tile_file_store(cfg.s3_path or store_name)
 
     elif store_type == 's3':
         from tilequeue.store import make_s3_store
@@ -565,7 +565,8 @@ def tilequeue_process(cfg, peripherals):
     assert n_simultaneous_query_sets > 0
     # reduce queue size when we're rendering metatiles to try and avoid the
     # geometry waiting to be processed from taking up all the RAM!
-    default_queue_buffer_size = max(1, 128 >> (2 * cfg.metatile_size))
+    default_queue_buffer_size = max(1, 128 >> (2 * (cfg.metatile_size or 0)))
+    
     sql_queue_buffer_size = cfg.sql_queue_buffer_size or \
         default_queue_buffer_size
     proc_queue_buffer_size = cfg.proc_queue_buffer_size or \
