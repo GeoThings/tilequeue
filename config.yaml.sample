@@ -188,9 +188,16 @@ toi-store:
 
 # Configuration for the tiles of interest prune/garden command.
 toi-prune:
+  # location of tileserver logs
+  tile-traffic-log-path: ../tileserver/nohup.out
+
   # Connection and query configuration for a RedShift database containing
   # request information for tiles.
   redshift:
+    # if database-uri is not specified, postgresql configuration above is used
+    # which relies on following precondition: tilequeue consume-tile-traffic
+    # needs to be used to pre-populate the designated table with tile traffic logs
+    # and add date util functions for postgres/redshift compatability
     database-uri: postgresql://user:password@localhost:5439/database
     # The number of days of history to query for.
     days: 30
@@ -208,6 +215,10 @@ toi-prune:
     bucket: mapzen-tiles-dev-us-east
     date-prefix: 20170322
     path: osm
+    layer: all
+    format: zip
+  # a reduced version of prev s3 entity
+  store:
     layer: all
     format: zip
   always-include:
