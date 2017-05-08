@@ -425,10 +425,7 @@ def make_store(store_type, store_name, cfg):
     if store_type == 'directory':
         from tilequeue.store import make_tile_file_store
         return make_tile_file_store(cfg.s3_path or store_name)
-<<<<<<< HEAD
-=======
 
->>>>>>> store-path-used-for-directory
 
     elif store_type == 's3':
         from tilequeue.store import make_s3_store
