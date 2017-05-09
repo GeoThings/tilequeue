@@ -963,8 +963,7 @@ def tilequeue_enqueue_tiles_of_interest(cfg, peripherals):
 def tilequeue_consume_tile_traffic(cfg, peripherals):
     logger = make_logger(cfg, 'consume_tile_traffic')
     logger.info('Consuming tile traffic logs ...')
-    logger.info(cfg.tile_traffic_log_path)
-
+    
     iped_dated_coords = None
     with open(cfg.tile_traffic_log_path, 'r') as log_file:
         iped_dated_coords = parse_log_file(log_file)
@@ -984,13 +983,16 @@ def tilequeue_consume_tile_traffic(cfg, peripherals):
         # insert the log records after the latest_date
         cursor.execute('SELECT max(date) from tile_traffic_v4')
         max_timestamp = cursor.fetchone()[0]
-        iped_dated_coords_to_insert = filter(lambda iped_dated_coord: iped_dated_coord[1] > max_timestamp, iped_dated_coords) if max_timestamp else iped_dated_coords
-        for (host, timestamp, marchalled_coord) in iped_dated_coords_to_insert:
-            coord = coord_unmarshall_int(marchalled_coord)
-            cursor.execute("INSERT into tile_traffic_v4 (date, z, x, y, tilesize, service, host) VALUES ('%s', %d, %d, %d, %d, '%s', '%s')"
+        
+        n_coords_inserted = 0
+        for host, timestamp, coord_int in iped_dated_coords:
+            if not max_timestamp or timestamp > max_timestamp:
+                coord = coord_unmarshall_int(coord_int)
+                cursor.execute("INSERT into tile_traffic_v4 (date, z, x, y, tilesize, service, host) VALUES ('%s', %d, %d, %d, %d, '%s', '%s')"
                             % (timestamp, coord.zoom, coord.column, coord.row, 512, 'vector-tiles', host))
+                n_coords_inserted += 1
 
-        logger.info('Inserted %d records' % len(iped_dated_coords_to_insert))
+        logger.info('Inserted %d records' % n_coords_inserted)
 
     sql_conn_pool.put_conns([sql_conn])
         
@@ -1063,7 +1065,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
             cur.execute("""
                 select x, y, z, tilesize, count(*)
                 from tile_traffic_v4
-                where (date >= dateadd({opt_quote}day{opt_quote}, -{days}, getdate()))
+                where (date >= dateadd('day', -{days}, getdate()))
                   and (z between 0 and {max_zoom})
                   and (x between 0 and pow(2,z)-1)
                   and (y between 0 and pow(2,z)-1)
@@ -1072,9 +1074,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                 order by z, x, y, tilesize
                 """.format(
                     days=redshift_days_to_query,
-                    max_zoom=redshift_zoom_cutoff,
-                    # postgres replica of dateadd(check utils.py) first arg(interval kind) is a string
-                    opt_quote="'" if is_postgres_conn_info else ""
+                    max_zoom=redshift_zoom_cutoff
             ))
             for (x, y, z, tile_size, count) in cur:
                 coord = create_coord(x, y, z)
@@ -1168,7 +1168,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                     len(toi_to_remove))
 
         for coord_ints in grouper(toi_to_remove, 1000):
-            removed = store.delete_tiles(map(lambda coord_int: coord_unmarshall_int(coord_int), coord_ints), 
+            removed = store.delete_tiles(map(coord_unmarshall_int, coord_ints), 
                                          lookup_format_by_extension(store_parts['format']), store_parts['layer'])
             logger.info('Removed %s tiles from S3', removed)
 
