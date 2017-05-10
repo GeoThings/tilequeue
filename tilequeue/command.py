@@ -346,6 +346,41 @@ def coord_ints_from_paths(paths):
     )
     return result
 
+def tilequeue_delete_expired(cfg, peripherals):
+    logger = make_logger(cfg, 'delete_expired')
+    logger.info("Intersecting expired tiles with tiles of interest")
+    sqs_queue = peripherals.queue
+
+    assert cfg.intersect_expired_tiles_location, \
+        'Missing tiles expired-location configuration'
+    assert os.path.exists(cfg.intersect_expired_tiles_location), \
+        'tiles expired-location does not exist'
+
+    if os.path.isdir(cfg.intersect_expired_tiles_location):
+        file_names = os.listdir(cfg.intersect_expired_tiles_location)
+        if not file_names:
+            logger.info('No expired tiles found, terminating.')
+            return
+        file_names.sort()
+        # cap the total number of files that we process in one shot
+        # this will limit memory usage, as well as keep progress moving
+        # along more consistently rather than bursts
+        expired_tile_files_cap = 20
+        file_names = file_names[:expired_tile_files_cap]
+        expired_tile_paths = [os.path.join(cfg.intersect_expired_tiles_location, x)
+                              for x in file_names]
+    else:
+        expired_tile_paths = [cfg.intersect_expired_tiles_location]
+    
+    coord_ints_path_result = coord_ints_from_paths(expired_tile_paths)
+    all_coord_ints_set = coord_ints_path_result['coord_set']
+    
+    store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
+    for output_format_extension in cfg.output_formats:
+        removed = store.delete_tiles(map(coord_unmarshall_int, all_coord_ints_set),
+                                    lookup_format_by_extension(output_format_extension), 'all')
+        logger.info("Removed %d %s tiles" % (removed, output_format_extension))
+    
 
 def tilequeue_intersect(cfg, peripherals):
     logger = make_logger(cfg, 'intersect')
@@ -1604,7 +1639,9 @@ def tilequeue_main(argv_args=None):
         ('wof-load-initial-neighbourhoods', create_command_parser(
             tilequeue_initial_load_wof_neighbourhoods)),
         ('consume-tile-traffic', create_command_parser(
-            tilequeue_consume_tile_traffic))
+            tilequeue_consume_tile_traffic)),
+        ('delete-expired', create_command_parser(
+            tilequeue_delete_expired))
     )
     for parser_name, parser_func in parser_config:
         subparser = subparsers.add_parser(parser_name)
