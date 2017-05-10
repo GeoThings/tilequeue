@@ -1029,16 +1029,16 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
 
     prune_cfg = cfg.yml.get('toi-prune', {})
 
-    redshift_cfg = prune_cfg.get('redshift', {})
-    db_conn_info = redshift_cfg.get('database-uri')
+    tile_history_cfg = prune_cfg.get('tile-history', {})
+    db_conn_info = tile_history_cfg.get('database-uri')
     assert db_conn_info, ("A postgres-compatible connection URI must "
                           "be present in the config yaml")
     
-    redshift_days_to_query = redshift_cfg.get('days')
+    redshift_days_to_query = tile_history_cfg.get('days')
     assert redshift_days_to_query, ("Number of days to query "
                                     "redshift is not specified")
 
-    redshift_zoom_cutoff = int(redshift_cfg.get('max-zoom', '16'))
+    redshift_zoom_cutoff = int(tile_history_cfg.get('max-zoom', '16'))
 
     # flag indicating that s3 entry in toi-prune is used for s3 store 
     legacy_fallback = 's3' in prune_cfg
