@@ -129,7 +129,7 @@ class Configuration(object):
         self.s3_queue_buffer_size = self._cfg('queue_buffer_size s3')
 
         self.tile_traffic_log_path = self._cfg('toi-prune tile-traffic-log-path')
-        self.delete_expired_cascade_until = self._cfg('delete-expired cascade-delete-until')
+        self.delete_expired_cascade_until = self._cfg('tiles delete-expired cascade-delete-until')
 
     def _cfg(self, yamlkeys_str):
         yamlkeys = yamlkeys_str.split()
