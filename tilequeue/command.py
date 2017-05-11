@@ -286,6 +286,31 @@ def tilequeue_drain(cfg, peripherals):
     logger.info('Removed %d messages' % n)
 
 
+def explode(coord_ints, until=0):
+
+    next_coord_ints = coord_ints
+    coord_ints_at_parent_zoom = set()
+
+    total_coord_ints = []
+
+    while True:
+        for coord_int in next_coord_ints:
+
+            total_coord_ints.append(coord_int)
+            
+            zoom = zoom_mask & coord_int
+            if zoom > until:
+                parent_coord_int = coord_int_zoom_up(coord_int)
+                coord_ints_at_parent_zoom.add(parent_coord_int)
+
+        if not coord_ints_at_parent_zoom:
+            break
+
+        next_coord_ints = coord_ints_at_parent_zoom
+        coord_ints_at_parent_zoom = set()
+
+    return total_coord_ints
+
 def explode_and_intersect(coord_ints, tiles_of_interest, until=0):
 
     next_coord_ints = coord_ints
@@ -373,7 +398,7 @@ def tilequeue_delete_expired(cfg, peripherals):
         expired_tile_paths = [cfg.intersect_expired_tiles_location]
     
     coord_ints_path_result = coord_ints_from_paths(expired_tile_paths)
-    all_coord_ints_set = coord_ints_path_result['coord_set']
+    all_coord_ints_set = explode(coord_ints_path_result['coord_set'], cfg.delete_expired_cascade_until)
     
     store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
     for output_format_extension in cfg.output_formats:

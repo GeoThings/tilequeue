@@ -84,6 +84,10 @@ tiles:
     # the lowest zoom level to consider when enqueueing tiles to
     # process on update
     parent-zoom-until: 11
+    
+  delete-expired:
+    # the lowest zoom level to cascade deletion of expired tiles for
+    cascade-delete-until: 15
 
   # zoom where tile content stops changing
   max-zoom-with-changes: 16
