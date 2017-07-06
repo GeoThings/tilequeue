@@ -40,7 +40,7 @@ def parse_log_file(log_file):
         match = re.search(log_pattern, log_string)
         if match and len(match.groups()) == 8:
             tile_log_records.append((match.group(1), 
-                                      datetime.strptime(match.group(2), '%d/%B/%Y %H:%M:%S'), 
+                                      datetime.strptime(match.group(2), '%d/%b/%Y %H:%M:%S'), 
                                       coord_marshall_int(create_coord(match.group(6), match.group(7), match.group(5)))))
 
     return tile_log_records
