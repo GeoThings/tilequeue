@@ -1,6 +1,6 @@
+from collections import defaultdict
 from collections import Iterable
 from collections import namedtuple
-from collections import defaultdict
 from contextlib import closing
 from itertools import chain
 from jinja2 import Environment
@@ -12,15 +12,16 @@ from tilequeue.format import lookup_format_by_extension
 from tilequeue.metro_extract import city_bounds
 from tilequeue.metro_extract import parse_metro_extract
 from tilequeue.query import DataFetcher
+from tilequeue.query import jinja_filter_bbox
 from tilequeue.query import jinja_filter_bbox_filter
 from tilequeue.query import jinja_filter_bbox_intersection
-from tilequeue.query import jinja_filter_bbox_padded_intersection
-from tilequeue.query import jinja_filter_bbox
-from tilequeue.query import jinja_filter_geometry
 from tilequeue.query import jinja_filter_bbox_overlaps
+from tilequeue.query import jinja_filter_bbox_padded_intersection
+from tilequeue.query import jinja_filter_geometry
 from tilequeue.queue import make_sqs_queue
 from tilequeue.store import s3_tile_key
 from tilequeue.tile import coord_int_zoom_up
+from tilequeue.tile import coord_is_valid
 from tilequeue.tile import coord_marshall_int
 from tilequeue.tile import coord_unmarshall_int
 from tilequeue.tile import create_coord
@@ -36,7 +37,6 @@ from tilequeue.top_tiles import parse_top_tiles
 from tilequeue.utils import grouper
 from tilequeue.utils import parse_log_file
 from tilequeue.utils import mimic_prune_tiles_of_interest_sql_structure
-from tilequeue.utils import postgres_add_compat_date_utils
 from tilequeue.worker import DataFetch
 from tilequeue.worker import ProcessAndFormatData
 from tilequeue.worker import QueuePrint
@@ -47,20 +47,20 @@ from tilequeue.postgresql import DBAffinityConnectionsNoLimit
 from urllib2 import urlopen
 from zope.dottedname.resolve import resolve
 import argparse
+import datetime
 import logging
 import logging.config
 import multiprocessing
 import operator
 import os
+import os.path
 import Queue
 import signal
 import sys
 import threading
 import time
-import yaml
-import datetime
-import os.path
 import traceback
+import yaml
 
 
 def create_command_parser(fn):
@@ -428,8 +428,9 @@ def tilequeue_intersect(cfg, peripherals):
         # along more consistently rather than bursts
         expired_tile_files_cap = 20
         file_names = file_names[:expired_tile_files_cap]
-        expired_tile_paths = [os.path.join(cfg.intersect_expired_tiles_location, x)
-                              for x in file_names]
+        expired_tile_paths = \
+            [os.path.join(cfg.intersect_expired_tiles_location, x)
+             for x in file_names]
     else:
         expired_tile_paths = [cfg.intersect_expired_tiles_location]
 
@@ -488,7 +489,6 @@ def make_store(store_type, store_name, cfg):
     if store_type == 'directory':
         from tilequeue.store import make_tile_file_store
         return make_tile_file_store(cfg.s3_path or store_name)
-
 
     elif store_type == 's3':
         from tilequeue.store import make_s3_store
@@ -694,8 +694,8 @@ def tilequeue_process(cfg, peripherals):
         post_process_data, formats, sql_data_fetch_queue, processor_queue,
         cfg.buffer_cfg, logger)
 
-    s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool,
-                           store, logger, cfg.metatile_size, cfg.store_orig)
+    s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool, store,
+                           logger, cfg.metatile_size)
 
     thread_sqs_writer_stop = threading.Event()
     sqs_queue_writer = SqsQueueWriter(sqs_queue, s3_store_queue, logger,
@@ -978,7 +978,8 @@ def tilequeue_seed(cfg, peripherals):
     if cfg.seed_should_add_to_tiles_of_interest:
         logger.info('Adding to Tiles of Interest ... ')
 
-        if not os.path.exists(cfg.toi_store_file_name) and cfg.toi_store_type == 'file':
+        if (cfg.toi_store_type == 'file' and
+                not os.path.exists(cfg.toi_store_file_name)):
             toi_set = set()
         else:
             toi_set = peripherals.toi.fetch_tiles_of_interest()
@@ -1024,11 +1025,11 @@ def tilequeue_consume_tile_traffic(cfg, peripherals):
     logger = make_logger(cfg, 'consume_tile_traffic')
     logger.info('Consuming tile traffic logs ...')
     
-    iped_dated_coords = None
+    tile_log_records = None
     with open(cfg.tile_traffic_log_path, 'r') as log_file:
-        iped_dated_coords = parse_log_file(log_file)
+        tile_log_records = parse_log_file(log_file)
 
-    if not iped_dated_coords:
+    if not tile_log_records:
         logger.info("Couldn't parse log file")
         sys.exit(1)
     
@@ -1038,14 +1039,13 @@ def tilequeue_consume_tile_traffic(cfg, peripherals):
     sql_conn = sql_conn_pool.get_conns(1)[0]
     with sql_conn.cursor() as cursor:
         mimic_prune_tiles_of_interest_sql_structure(cursor)
-        postgres_add_compat_date_utils(cursor)
-        
+
         # insert the log records after the latest_date
         cursor.execute('SELECT max(date) from tile_traffic_v4')
         max_timestamp = cursor.fetchone()[0]
         
         n_coords_inserted = 0
-        for host, timestamp, coord_int in iped_dated_coords:
+        for host, timestamp, coord_int in tile_log_records:
             if not max_timestamp or timestamp > max_timestamp:
                 coord = coord_unmarshall_int(coord_int)
                 cursor.execute("INSERT into tile_traffic_v4 (date, z, x, y, tilesize, service, host) VALUES ('%s', %d, %d, %d, %d, '%s', '%s')"
@@ -1118,7 +1118,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
             cur.execute("""
                 select x, y, z, tilesize, count(*)
                 from tile_traffic_v4
-                where (date >= dateadd('day', -{days}, getdate()))
+                where (date >= (current_timestamp - interval '{days} days'))
                   and (z between 0 and {max_zoom})
                   and (x between 0 and pow(2,z)-1)
                   and (y between 0 and pow(2,z)-1)
@@ -1189,12 +1189,34 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
                     coord_marshall_int(deserialize_coord(l.strip()))
                     for l in f
                 )
+        elif 'bucket' in info:
+            from boto import connect_s3
+            from boto.s3.bucket import Bucket
+            s3_conn = connect_s3()
+            bucket = Bucket(s3_conn, info['bucket'])
+            key = bucket.get_key(info['key'])
+            raw_coord_data = key.get_contents_as_string()
+            for line in raw_coord_data.splitlines():
+                coord = deserialize_coord(line.strip())
+                if coord:
+                    # NOTE: the tiles in the file should be of the
+                    # same size as the toi
+                    coord_int = coord_marshall_int(coord)
+                    immortal_tiles.add(coord_int)
 
         # Filter out nulls that might sneak in for various reasons
         immortal_tiles = filter(None, immortal_tiles)
 
         n_inc = len(immortal_tiles)
         new_toi = new_toi.union(immortal_tiles)
+
+        # ensure that the new coordinates have valid zooms
+        new_toi_valid_range = set()
+        for coord_int in new_toi:
+            coord = coord_unmarshall_int(coord_int)
+            if coord_is_valid(coord, cfg.max_zoom):
+                new_toi_valid_range.add(coord_int)
+        new_toi = new_toi_valid_range
 
         logger.info('Adding in tiles from %s ... done. %s found', name, n_inc)
 
@@ -1531,45 +1553,6 @@ def tilequeue_dump_tiles_of_interest(cfg, peripherals):
     )
 
 
-def tilequeue_dump_tiles_of_interest_from_redis(cfg, peripherals):
-    """
-    Dumps the tiles of interest from Redis into a newline-delimited
-    file called 'toi.txt'.
-
-    This is intended to be used once to migrate away from using Redis
-    and then removed.
-    """
-    logger = make_logger(cfg, 'dump_tiles_of_interest_from_redis')
-    logger.info('Dumping TOI from Redis ...')
-
-    logger.info('Fetching tiles of interest from Redis ...')
-
-    # Make a raw Redis client so we can do low-level set manipulation
-    redis_client = make_redis_client(cfg)
-
-    toi_iter = redis_client.sscan_iter(cfg.redis_cache_set_key, count=10000)
-
-    toi_set = set()
-    for coord_int in toi_iter:
-        toi_set.add(coord_int)
-
-    logger.info('Fetching tiles of interest from Redis ... done')
-
-    toi_filename = "toi.txt"
-
-    n_toi = len(toi_set)
-    logger.info('Writing %d tiles of interest to %s ...', n_toi, toi_filename)
-
-    with open(toi_filename, "w") as f:
-        save_set_to_fp(toi_set, f)
-
-    logger.info(
-        'Writing %d tiles of interest to %s ... done',
-        n_toi,
-        toi_filename
-    )
-
-
 def tilequeue_load_tiles_of_interest(cfg, peripherals):
     """
     Given a newline-delimited file containing tile coordinates in
@@ -1649,9 +1632,6 @@ def tilequeue_main(argv_args=None):
         ('intersect', create_command_parser(tilequeue_intersect)),
         ('dump-tiles-of-interest',
             create_command_parser(tilequeue_dump_tiles_of_interest)),
-        ('dump-tiles-of-interest-from-redis',
-            create_command_parser(
-                tilequeue_dump_tiles_of_interest_from_redis)),
         ('load-tiles-of-interest',
             create_command_parser(tilequeue_load_tiles_of_interest)),
         ('enqueue-tiles-of-interest',

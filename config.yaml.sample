@@ -174,11 +174,6 @@ metatile:
   # be available in the future.
   size: null
 
-  # if this is set to true, then tilequeue will write the individual formats in
-  # addition to the metatile. this can be useful when gracefully "cutting over"
-  # to a metatile-based system from an individual format based one.
-  store_metatile_and_originals: false
-
 # Configuration for where to store the tiles of interest set
 toi-store:
   # We support storing the TOI in S3 or as a file
@@ -218,7 +213,7 @@ toi-prune:
     path: osm
     layer: all
     format: zip
-  # a reduced version of prev s3 entity
+  # layer and format of tiles to be deleted
   store:
     layer: all
     format: zip
@@ -238,3 +233,7 @@ toi-prune:
     #  tiles: 0/0/0,1/1/0
     # tests-file:
     #  file: list-of-tile-coordinates.txt
+    # NOTE: the coordinates should be of the same size as the toi, currently 512
+    # integration-test-coordinates:
+    #   bucket: mapzen-tiles-assets
+    #   key: test/integration-test-coords.txt

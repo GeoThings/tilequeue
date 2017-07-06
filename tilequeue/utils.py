@@ -35,15 +35,15 @@ def parse_log_file(log_file):
 
     log_pattern = '%s - - %s "([\w]+) %s.*' % (ip_pattern, date_pattern, tile_id_pattern)
 
-    iped_dated_coords = []
+    tile_log_records = []
     for log_string in log_file:
         match = re.search(log_pattern, log_string)
         if match and len(match.groups()) == 8:
-            iped_dated_coords.append((match.group(1), 
+            tile_log_records.append((match.group(1), 
                                       datetime.strptime(match.group(2), '%d/%b/%Y %H:%M:%S'), 
                                       coord_marshall_int(create_coord(match.group(6), match.group(7), match.group(5)))))
 
-    return iped_dated_coords
+    return tile_log_records
 
 def mimic_prune_tiles_of_interest_sql_structure(cursor):
     cursor.execute('''CREATE TABLE IF NOT EXISTS tile_traffic_v4 (
@@ -56,21 +56,3 @@ def mimic_prune_tiles_of_interest_sql_structure(cursor):
             service varchar(32),
             host inet not null
         )''')
-
-def postgres_add_compat_date_utils(cursor):
-    cursor.execute('''
-        CREATE OR REPLACE FUNCTION DATEADD(interval_kind VARCHAR(20), interval_offset INTEGER, dt DATE)
-        RETURNS TIMESTAMP AS $$
-        BEGIN
-            RETURN (SELECT dt + (interval_offset || ' ' || interval_kind)::INTERVAL);
-        END;
-        $$ language plpgsql
-    ''')
-    cursor.execute('''
-        CREATE OR REPLACE FUNCTION GETDATE()
-        RETURNS DATE AS $$
-        BEGIN
-            RETURN (SELECT current_date);
-        END;
-        $$ language plpgsql
-    ''')
