@@ -36,6 +36,7 @@ from tilequeue.toi import save_set_to_fp
 from tilequeue.top_tiles import parse_top_tiles
 from tilequeue.utils import grouper
 from tilequeue.utils import parse_log_file
+from tilequeue.utils import mimic_prune_tiles_of_interest_sql_structure
 from tilequeue.worker import DataFetch
 from tilequeue.worker import ProcessAndFormatData
 from tilequeue.worker import QueuePrint
@@ -977,7 +978,8 @@ def tilequeue_consume_tile_traffic(cfg, peripherals):
     sql_conn_pool = DBAffinityConnectionsNoLimit(dbnames, conn_info, False)
     sql_conn = sql_conn_pool.get_conns(1)[0]
     with sql_conn.cursor() as cursor:
-        
+        mimic_prune_tiles_of_interest_sql_structure(cursor)
+
         # insert the log records after the latest_date
         cursor.execute('SELECT max(date) from tile_traffic_v4')
         max_timestamp = cursor.fetchone()[0]
