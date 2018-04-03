@@ -385,29 +385,29 @@ class S3Storage(object):
             tiles = make_metatiles(self.metatile_size, tiles)
 
         for tile in tiles:
-            extracted_tile_data_all = tile['tile']
-            # find a better way to retrieve layers
-            for layer in self.layer_config.all_layer_names:
-                layer_data = parse_layer_spec(layer, self.layer_config)
-                tile_data = reformat_selected_layers(extracted_tile_data_all,
-                                                     layer_data,
-                                                     tile['coord'],
-                                                     tile['format'],
-                                                     self.buffer_config)
-                
-                async_result = self.io_pool.apply_async(
-                    write_tile_if_changed, (
-                        self.store,
-                        tile_data,
-                        # important to use the coord from the
-                        # formatted tile here, because we could have
-                        # cut children tiles that have separate zooms
-                        # too
-                        tile['coord'],
-                        tile['format'],
-                        layer))
-                async_jobs.append(async_result)
+            # extracted_tile_data_all = tile['tile']
+            # # find a better way to retrieve layers
+            # for layer in self.layer_config.all_layer_names:
+            #     layer_data = parse_layer_spec(layer, self.layer_config)
+            #     tile_data = reformat_selected_layers(extracted_tile_data_all,
+            #                                          layer_data,
+            #                                          tile['coord'],
+            #                                          tile['format'],
+            #                                          self.buffer_config)
+            #     async_result = self.io_pool.apply_async(
+            #         write_tile_if_changed, (
+            #             self.store,
+            #             tile_data,
+            #             # important to use the coord from the
+            #             # formatted tile here, because we could have
+            #             # cut children tiles that have separate zooms
+            #             # too
+            #             tile['coord'],
+            #             tile['format'],
+            #             layer))
+            #     async_jobs.append(async_result)
 
+            print(tile['tile'])
             async_result = self.io_pool.apply_async(
                 write_tile_if_changed, (
                     self.store,
