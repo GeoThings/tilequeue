@@ -373,7 +373,7 @@ def coord_ints_from_paths(paths):
 
 def tilequeue_delete_expired(cfg, peripherals):
     logger = make_logger(cfg, 'delete_expired')
-    logger.info("Intersecting expired tiles with tiles of interest")
+    logger.info("Deleting expired tiles")
     sqs_queue = peripherals.queue
 
     assert cfg.intersect_expired_tiles_location, \
@@ -398,7 +398,9 @@ def tilequeue_delete_expired(cfg, peripherals):
         expired_tile_paths = [cfg.intersect_expired_tiles_location]
     
     coord_ints_path_result = coord_ints_from_paths(expired_tile_paths)
-    all_coord_ints_set = explode(coord_ints_path_result['coord_set'], cfg.delete_expired_cascade_until)
+    # all_coord_ints_set = explode(coord_ints_path_result['coord_set'], cfg.delete_expired_cascade_until)
+    all_coord_ints_set = coord_ints_path_result['coord_set']
+    logger.info("%d tiles need to be removed" % len(all_coord_ints_set))
     
     store = make_store(cfg.store_type, cfg.s3_bucket, cfg)
     for output_format_extension in cfg.output_formats:
