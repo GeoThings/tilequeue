@@ -298,7 +298,7 @@ class ProcessAndFormatData(object):
 class S3Storage(object):
 
     def __init__(self, input_queue, output_queue, io_pool, store, logger,
-                 metatile_size, layer_config):
+                 metatile_size, layer_config, buffer_config):
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.io_pool = io_pool
@@ -306,6 +306,7 @@ class S3Storage(object):
         self.logger = logger
         self.metatile_size = metatile_size
         self.layer_config = layer_config
+        self.buffer_config = buffer_config
 
     def __call__(self, stop):
         saw_sentinel = False
@@ -388,7 +389,12 @@ class S3Storage(object):
             # find a better way to retrieve layers
             for layer in self.layer_config.all_layer_names:
                 layer_data = parse_layer_spec(layer, self.layer_config)
-                tile_data = reformat_selected_layers(extracted_tile_data_all, layer_data, tile['coord'], tile['format'])
+                tile_data = reformat_selected_layers(extracted_tile_data_all,
+                                                     layer_data,
+                                                     tile['coord'],
+                                                     tile['format'],
+                                                     self.buffer_config)
+                
                 async_result = self.io_pool.apply_async(
                     write_tile_if_changed, (
                         self.store,
