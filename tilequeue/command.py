@@ -34,7 +34,7 @@ from tilequeue.tile import zoom_mask
 from tilequeue.toi import load_set_from_fp
 from tilequeue.toi import save_set_to_fp
 from tilequeue.top_tiles import parse_top_tiles
-from tilequeue.utils import grouper
+from tilequeue.utils import grouper, LayerConfig
 from tilequeue.utils import parse_log_file
 from tilequeue.utils import mimic_prune_tiles_of_interest_sql_structure
 from tilequeue.worker import DataFetch
@@ -621,6 +621,9 @@ def tilequeue_process(cfg, peripherals):
             query_cfg, cfg.buffer_cfg, cfg.template_path, cfg.reload_templates,
             os.path.dirname(cfg.query_cfg)))
 
+    all_layer_names = [x['name'] for x in all_layer_data]
+    layer_config = LayerConfig(all_layer_names, layer_data)
+
     formats = lookup_formats(cfg.output_formats)
 
     sqs_queue = peripherals.queue
@@ -695,7 +698,7 @@ def tilequeue_process(cfg, peripherals):
         cfg.buffer_cfg, logger)
 
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool, store,
-                           logger, cfg.metatile_size)
+                           logger, cfg.metatile_size, layer_config)
 
     thread_sqs_writer_stop = threading.Event()
     sqs_queue_writer = SqsQueueWriter(sqs_queue, s3_store_queue, logger,

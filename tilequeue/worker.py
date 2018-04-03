@@ -1,11 +1,11 @@
 from operator import attrgetter
 from psycopg2.extensions import TransactionRollbackError
 from tilequeue.process import process_coord
-from tilequeue.store import write_tile_if_changed
+from tilequeue.store import write_tile_if_changed, reformat_selected_layers
 from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import serialize_coord
-from tilequeue.utils import format_stacktrace_one_line
+from tilequeue.utils import format_stacktrace_one_line, parse_layer_spec
 from tilequeue.metatile import make_metatiles
 import logging
 import Queue
@@ -298,13 +298,14 @@ class ProcessAndFormatData(object):
 class S3Storage(object):
 
     def __init__(self, input_queue, output_queue, io_pool, store, logger,
-                 metatile_size):
+                 metatile_size, layer_config):
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.io_pool = io_pool
         self.store = store
         self.logger = logger
         self.metatile_size = metatile_size
+        self.layer_config = layer_config
 
     def __call__(self, stop):
         saw_sentinel = False
@@ -383,6 +384,23 @@ class S3Storage(object):
             tiles = make_metatiles(self.metatile_size, tiles)
 
         for tile in tiles:
+            extracted_tile_data_all = tile['tile']
+            # find a better way to retrieve layers
+            for layer in self.layer_config.all_layer_names:
+                layer_data = parse_layer_spec(layer, self.layer_config)
+                tile_data = reformat_selected_layers(extracted_tile_data_all, layer_data, tile['coord'], tile['format'])
+                async_result = self.io_pool.apply_async(
+                    write_tile_if_changed, (
+                        self.store,
+                        tile_data,
+                        # important to use the coord from the
+                        # formatted tile here, because we could have
+                        # cut children tiles that have separate zooms
+                        # too
+                        tile['coord'],
+                        tile['format'],
+                        layer))
+                async_jobs.append(async_result)
 
             async_result = self.io_pool.apply_async(
                 write_tile_if_changed, (

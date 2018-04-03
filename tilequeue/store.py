@@ -10,6 +10,11 @@ from tilequeue.metatile import metatiles_are_equal
 from tilequeue.format import zip_format
 import random
 import threading
+from tilequeue.tile import reproject_lnglat_to_mercator, coord_to_mercator_bounds, calc_meters_per_pixel_dim
+from tilequeue.transform import mercator_point_to_lnglat, transform_feature_layers_shape
+from cStringIO import StringIO
+import shapely
+import json
 
 
 def calc_hash(s):
@@ -279,3 +284,77 @@ def write_tile_if_changed(store, tile_data, coord, format, layer):
         return True
     else:
         return False
+
+
+def ensure_utf8_properties(props):
+    new_props = {}
+    for k, v in props.items():
+        if isinstance(k, unicode):
+            k = k.encode('utf-8')
+        if isinstance(v, unicode):
+            v = v.encode('utf-8')
+        new_props[k] = v
+    return new_props
+
+
+def decode_json_tile_for_layers(tile_data, layer_data):
+    layer_names_to_keep = set(ld['name'] for ld in layer_data)
+    feature_layers = []
+    json_data = json.loads(tile_data)
+    for layer_name, json_layer_data in json_data.items():
+        if layer_name not in layer_names_to_keep:
+            continue
+        features = []
+        json_features = json_layer_data['features']
+        for json_feature in json_features:
+            json_geometry = json_feature['geometry']
+            shape_lnglat = shapely.geometry.shape(json_geometry)
+            shape_mercator = shapely.ops.transform(
+                reproject_lnglat_to_mercator, shape_lnglat)
+            properties = json_feature['properties']
+            # Ensure that we have strings for all key values and not
+            # unicode values. Some of the encoders except to be
+            # working with strings directly
+            properties = ensure_utf8_properties(properties)
+            fid = None
+            feature = shape_mercator, properties, fid
+            features.append(feature)
+        # a further transform asks for a layer_datum is_clipped
+        # property where it applies clipping
+        # but this data coming from json is already clipped
+        feature_layer = dict(
+            name=layer_name,
+            features=features,
+            layer_datum=dict(is_clipped=False),
+        )
+        feature_layers.append(feature_layer)
+    return feature_layers
+
+
+def reformat_selected_layers(
+        json_tile_data, layer_data, coord, format, buffer_cfg):
+    """
+    Reformats the selected (subset of) layers from a JSON tile containing all
+    layers. We store "tiles of record" containing all layers as JSON, and this
+    function does most of the work of reading that, pruning the layers which
+    aren't needed and reformatting it to the desired output format.
+    """
+
+    feature_layers = decode_json_tile_for_layers(json_tile_data, layer_data)
+    bounds_merc = coord_to_mercator_bounds(coord)
+    bounds_lnglat = (
+        mercator_point_to_lnglat(bounds_merc[0], bounds_merc[1]) +
+        mercator_point_to_lnglat(bounds_merc[2], bounds_merc[3]))
+
+    meters_per_pixel_dim = calc_meters_per_pixel_dim(coord.zoom)
+
+    scale = 4096
+    feature_layers = transform_feature_layers_shape(
+        feature_layers, format, scale, bounds_merc,
+        meters_per_pixel_dim, buffer_cfg)
+
+    tile_data_file = StringIO()
+    format.format_tile(tile_data_file, feature_layers, coord.zoom,
+                       bounds_merc, bounds_lnglat)
+    tile_data = tile_data_file.getvalue()
+    return tile_data
