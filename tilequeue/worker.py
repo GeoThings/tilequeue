@@ -275,23 +275,17 @@ class ProcessAndFormatData(object):
                     cut_coords, self.buffer_cfg)
 
                 # json format is required for layer-seperated outputs
-                # if not present in formats additionally process as json
-                # and use it to make layer clipped output tiles
-                if len([f for f in self.formats if f == json_format]) == 0:
-                    formatted_json_included_tiles, _ = process_coord(
-                        coord, nominal_zoom, feature_layers,
-                        self.post_process_data, [json_format], unpadded_bounds,
-                        cut_coords, self.buffer_cfg)
-                else:
+                if len([f for f in self.formats if f == json_format]) > 0:
                     formatted_json_included_tiles = formatted_tiles
-
-                tile_data_all = extract_tile_data(coord, json_format, formatted_json_included_tiles)
-                for format_entity in self.formats:
-                    for layer in self.layer_config.all_layer_names:
-                        layer_data = parse_layer_spec(layer, self.layer_config)
-                        reformatted_tile_data = reformat_selected_layers(tile_data_all, layer_data, coord, format_entity, self.buffer_cfg)
-                        reformatted_tile = dict(format=format_entity, tile=reformatted_tile_data, coord=coord, layer=layer)
-                        formatted_tiles.append(reformatted_tile)
+                    tile_data_all = extract_tile_data(coord, json_format, formatted_json_included_tiles)
+                    for format_entity in self.formats:
+                        for layer in self.layer_config.all_layer_names:
+                            layer_data = parse_layer_spec(layer, self.layer_config)
+                            reformatted_tile_data = reformat_selected_layers(tile_data_all, layer_data, coord,
+                                                                             format_entity, self.buffer_cfg)
+                            reformatted_tile = dict(format=format_entity, tile=reformatted_tile_data, coord=coord,
+                                                    layer=layer)
+                            formatted_tiles.append(reformatted_tile)
 
             except:
                 stacktrace = format_stacktrace_one_line()
