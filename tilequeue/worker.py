@@ -1,12 +1,13 @@
 from operator import attrgetter
 from psycopg2.extensions import TransactionRollbackError
-from tilequeue.process import process_coord
-from tilequeue.store import write_tile_if_changed, reformat_selected_layers
+from tilequeue.process import process_coord, reformat_selected_layers, extract_tile_data
+from tilequeue.store import write_tile_if_changed
 from tilequeue.tile import coord_children_range
 from tilequeue.tile import coord_to_mercator_bounds
 from tilequeue.tile import serialize_coord
 from tilequeue.utils import format_stacktrace_one_line, parse_layer_spec
 from tilequeue.metatile import make_metatiles
+from tilequeue.format import json_format
 import logging
 import Queue
 import signal
@@ -233,7 +234,7 @@ class ProcessAndFormatData(object):
     scale = 4096
 
     def __init__(self, post_process_data, formats, input_queue,
-                 output_queue, buffer_cfg, logger):
+                 output_queue, buffer_cfg, logger, layer_config):
         formats.sort(key=attrgetter('sort_key'))
         self.post_process_data = post_process_data
         self.formats = formats
@@ -241,6 +242,7 @@ class ProcessAndFormatData(object):
         self.output_queue = output_queue
         self.buffer_cfg = buffer_cfg
         self.logger = logger
+        self.layer_config = layer_config
 
     def __call__(self, stop):
         # ignore ctrl-c interrupts when run from terminal
@@ -271,6 +273,26 @@ class ProcessAndFormatData(object):
                     coord, nominal_zoom, feature_layers,
                     self.post_process_data, self.formats, unpadded_bounds,
                     cut_coords, self.buffer_cfg)
+
+                # json format is required for layer-seperated outputs
+                # if not present in formats additionally process as json
+                # and use it to make layer clipped output tiles
+                if len([f for f in self.formats if f == json_format]) == 0:
+                    formatted_json_included_tiles, _ = process_coord(
+                        coord, nominal_zoom, feature_layers,
+                        self.post_process_data, [json_format], unpadded_bounds,
+                        cut_coords, self.buffer_cfg)
+                else:
+                    formatted_json_included_tiles = formatted_tiles
+
+                tile_data_all = extract_tile_data(coord, json_format, formatted_json_included_tiles)
+                for format_entity in self.formats:
+                    for layer in self.layer_config.all_layer_names:
+                        layer_data = parse_layer_spec(layer, self.layer_config)
+                        reformatted_tile_data = reformat_selected_layers(tile_data_all, layer_data, coord, format_entity, self.buffer_cfg)
+                        reformatted_tile = dict(format=format_entity, tile=reformatted_tile_data, coord=coord, layer=layer)
+                        formatted_tiles.append(reformatted_tile)
+
             except:
                 stacktrace = format_stacktrace_one_line()
                 self.logger.error('Error processing: %s - %s' % (
@@ -298,15 +320,13 @@ class ProcessAndFormatData(object):
 class S3Storage(object):
 
     def __init__(self, input_queue, output_queue, io_pool, store, logger,
-                 metatile_size, layer_config, buffer_config):
+                 metatile_size):
         self.input_queue = input_queue
         self.output_queue = output_queue
         self.io_pool = io_pool
         self.store = store
         self.logger = logger
         self.metatile_size = metatile_size
-        self.layer_config = layer_config
-        self.buffer_config = buffer_config
 
     def __call__(self, stop):
         saw_sentinel = False
@@ -385,29 +405,6 @@ class S3Storage(object):
             tiles = make_metatiles(self.metatile_size, tiles)
 
         for tile in tiles:
-            # extracted_tile_data_all = tile['tile']
-            # # find a better way to retrieve layers
-            # for layer in self.layer_config.all_layer_names:
-            #     layer_data = parse_layer_spec(layer, self.layer_config)
-            #     tile_data = reformat_selected_layers(extracted_tile_data_all,
-            #                                          layer_data,
-            #                                          tile['coord'],
-            #                                          tile['format'],
-            #                                          self.buffer_config)
-            #     async_result = self.io_pool.apply_async(
-            #         write_tile_if_changed, (
-            #             self.store,
-            #             tile_data,
-            #             # important to use the coord from the
-            #             # formatted tile here, because we could have
-            #             # cut children tiles that have separate zooms
-            #             # too
-            #             tile['coord'],
-            #             tile['format'],
-            #             layer))
-            #     async_jobs.append(async_result)
-
-            print(tile['tile'])
             async_result = self.io_pool.apply_async(
                 write_tile_if_changed, (
                     self.store,

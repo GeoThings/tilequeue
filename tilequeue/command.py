@@ -697,10 +697,10 @@ def tilequeue_process(cfg, peripherals):
 
     data_processor = ProcessAndFormatData(
         post_process_data, formats, sql_data_fetch_queue, processor_queue,
-        cfg.buffer_cfg, logger)
+        cfg.buffer_cfg, logger, layer_config)
 
     s3_storage = S3Storage(processor_queue, s3_store_queue, io_pool, store,
-                           logger, cfg.metatile_size, layer_config, cfg.buffer_cfg)
+                           logger, cfg.metatile_size)
 
     thread_sqs_writer_stop = threading.Event()
     sqs_queue_writer = SqsQueueWriter(sqs_queue, s3_store_queue, logger,
