@@ -1388,7 +1388,7 @@ def tilequeue_prune_tiles_of_interest(cfg, peripherals):
             removed = store.delete_tiles(
                 map(coord_unmarshall_int, coord_ints),
                 lookup_format_by_extension(
-                    store_parts['format']), store_parts['layer'])
+                    store_parts['format']))
             logger.info('Removed %s tiles from S3', removed)
 
         logger.info('Removing %s tiles from TOI and S3 ... done',
@@ -1546,7 +1546,7 @@ def tilequeue_stuck_tiles(cfg, peripherals):
     Check which files exist on s3 but are not in toi.
     """
     store = _make_store(cfg)
-    format = lookup_format_by_extension('zip')
+    format = lookup_format_by_extension('mvt')
     layer = 'all'
 
     assert peripherals.toi, 'Missing toi'
@@ -1561,12 +1561,12 @@ def tilequeue_stuck_tiles(cfg, peripherals):
 def tilequeue_delete_stuck_tiles(cfg, peripherals):
     logger = make_logger(cfg, 'delete_stuck_tiles')
 
-    format = lookup_format_by_extension('zip')
+    format = lookup_format_by_extension('mvt')
     layer = 'all'
 
     store = _make_store(cfg)
 
-    logger.info('Removing tiles from S3 ...')
+    logger.info('Removing tiles from store ...')
     total_removed = 0
     for coord_strs in grouper(sys.stdin, 1000):
         coords = []
@@ -1575,12 +1575,12 @@ def tilequeue_delete_stuck_tiles(cfg, peripherals):
             if coord:
                 coords.append(coord)
         if coords:
-            n_removed = store.delete_tiles(coords, format, layer)
+            n_removed = store.delete_tiles(coords, format)
             total_removed += n_removed
-            logger.info('Removed %s tiles from S3', n_removed)
+            logger.info('Removed %s tiles from store', n_removed)
 
     logger.info('Total removed: %d', total_removed)
-    logger.info('Removing tiles from S3 ... DONE')
+    logger.info('Removing tiles from store ... DONE')
 
 
 def tilequeue_tile_status(cfg, peripherals, args):
@@ -1601,7 +1601,7 @@ def tilequeue_tile_status(cfg, peripherals, args):
         toi = peripherals.toi.fetch_tiles_of_interest()
 
     # TODO: make these configurable!
-    tile_format = lookup_format_by_extension('zip')
+    tile_format = lookup_format_by_extension('mvt')
     store = _make_store(cfg)
 
     for coord_str in args.coords:

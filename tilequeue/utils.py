@@ -34,7 +34,7 @@ def grouper(iterable, n):
 def parse_log_file(log_file):
     ip_pattern = r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
     # didn't match againts explicit date pattern, in case it changes
-    date_pattern = r'\[([\d\w\s\/:]+)\]'
+    date_pattern = r'\[([\d\w\s\/:\+]+)\]'
     tile_id_pattern = r'\/([\w]+)\/([\d]+)\/([\d]+)\/([\d]+)\.([\d\w]*)'
 
     log_pattern = r'%s - - %s "([\w]+) %s.*' % (
