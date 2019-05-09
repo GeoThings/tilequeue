@@ -1150,28 +1150,26 @@ def tilequeue_consume_tile_traffic(cfg, peripherals):
     conn_info = dict(cfg.postgresql_conn_info)
     dbnames = conn_info.pop('dbnames')
     sql_conn_pool = DBConnectionPool(dbnames, conn_info, False)
-    sql_conn = sql_conn_pool.get_conns(1)[0]
-    with sql_conn.cursor() as cursor:
+    with sql_conn_pool.get_conns(1) as sql_conn:
+        with sql_conn.cursor() as cursor:
 
-        # insert the log records after the latest_date
-        cursor.execute('SELECT max(date) from tile_traffic_v4')
-        max_timestamp = cursor.fetchone()[0]
+            # insert the log records after the latest_date
+            cursor.execute('SELECT max(date) from tile_traffic_v4')
+            max_timestamp = cursor.fetchone()[0]
 
-        n_coords_inserted = 0
-        for host, timestamp, coord_int in tile_log_records:
-            if not max_timestamp or timestamp > max_timestamp:
-                coord = coord_unmarshall_int(coord_int)
-                cursor.execute(
-                    "INSERT into tile_traffic_v4 "
-                    "(date, z, x, y, tilesize, service, host) VALUES "
-                    "('%s', %d, %d, %d, %d, '%s', '%s')"
-                    % (timestamp, coord.zoom, coord.column, coord.row, 512,
-                       'vector-tiles', host))
-                n_coords_inserted += 1
+            n_coords_inserted = 0
+            for host, timestamp, coord_int in tile_log_records:
+                if not max_timestamp or timestamp > max_timestamp:
+                    coord = coord_unmarshall_int(coord_int)
+                    cursor.execute(
+                        "INSERT into tile_traffic_v4 "
+                        "(date, z, x, y, tilesize, service, host) VALUES "
+                        "('%s', %d, %d, %d, %d, '%s', '%s')"
+                        % (timestamp, coord.zoom, coord.column, coord.row, 512,
+                        'vector-tiles', host))
+                    n_coords_inserted += 1
 
-        logger.info('Inserted %d records' % n_coords_inserted)
-
-    sql_conn_pool.put_conns([sql_conn])
+            logger.info('Inserted %d records' % n_coords_inserted)
 
 
 def emit_toi_stats(toi_set, peripherals):
