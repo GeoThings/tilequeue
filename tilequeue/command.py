@@ -1151,7 +1151,7 @@ def tilequeue_consume_tile_traffic(cfg, peripherals):
     dbnames = conn_info.pop('dbnames')
     sql_conn_pool = DBConnectionPool(dbnames, conn_info, False)
     with sql_conn_pool.get_conns(1) as sql_conn:
-        with sql_conn.cursor() as cursor:
+        with sql_conn[0].cursor() as cursor:
 
             # insert the log records after the latest_date
             cursor.execute('SELECT max(date) from tile_traffic_v4')
