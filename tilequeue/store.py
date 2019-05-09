@@ -13,6 +13,7 @@ from tilequeue.format import zip_format
 import random
 import threading
 import time
+from string import zfill
 from cStringIO import StringIO
 from urllib import urlencode
 
@@ -243,10 +244,18 @@ def make_dir_path(base_path, coord):
 
 
 def make_file_path(base_path, coord, extension):
+    x_fill = zfill(coord.column, 9)
+    y_fill = zfill(coord.row, 9)
     basefile_path = os.path.join(
         base_path,
-        str(int(coord.zoom)), str(int(coord.column)), str(int(coord.row)))
-    ext_str = '.%s' % extension
+        zfill(str(int(coord.zoom)), 2), 
+        x_fill[0:3],
+        x_fill[3:6],
+        x_fill[6:9],
+        y_fill[0:3],
+        y_fill[3:6],
+        y_fill[6:9])
+    ext_str = '.%s.data' % extension
     full_path = basefile_path + ext_str
     return full_path
 
