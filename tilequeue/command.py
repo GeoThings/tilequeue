@@ -1565,17 +1565,27 @@ def tilequeue_delete_stuck_tiles(cfg, peripherals):
     store = _make_store(cfg)
 
     logger.info('Removing tiles from store ...')
+    queue_writer = peripherals.queue_writer
     total_removed = 0
     for coord_strs in grouper(sys.stdin, 1000):
         coords = []
+        coords_to_enqueue = []
         for coord_str in coord_strs:
             coord = deserialize_coord(coord_str)
             if coord:
                 coords.append(coord)
         if coords:
-            n_removed = store.delete_tiles(coords, format)
+            n_removed = 0
+            for coord in coords:
+                is_removed = store.delete_tiles([coord], format)
+                if is_removed > 0:
+                    coords_to_enqueue.append(coord)
+                n_removed += is_removed
             total_removed += n_removed
             logger.info('Removed %s tiles from store', n_removed)
+
+            n_queued, n_in_flight = queue_writer.enqueue_batch(coords_to_enqueue)
+            logger.info('%d enqueued - %d in flight' % (n_queued, n_in_flight))
 
     logger.info('Total removed: %d', total_removed)
     logger.info('Removing tiles from store ... DONE')
