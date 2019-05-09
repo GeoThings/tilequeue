@@ -2,6 +2,7 @@ import sys
 import traceback
 import re
 from collections import defaultdict
+from dateutil.parser import parse
 from datetime import datetime
 from itertools import islice
 from tilequeue.tile import coord_marshall_int
@@ -46,7 +47,7 @@ def parse_log_file(log_file):
         if match and len(match.groups()) == 8:
             tile_log_records.append(
                 (match.group(1),
-                 datetime.strptime(match.group(2), '%d/%B/%Y %H:%M:%S'),
+                 parse(match.group(2).replace(':', ' ', 1)),
                  coord_marshall_int(
                      create_coord(
                          match.group(6), match.group(7), match.group(5)))))
