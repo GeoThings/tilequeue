@@ -238,8 +238,17 @@ class S3(object):
 
 
 def make_dir_path(base_path, coord):
+    x_fill = zfill(coord.column, 9)
+    y_fill = zfill(coord.row, 9)
     path = os.path.join(
-        base_path, str(int(coord.zoom)), str(int(coord.column)))
+        base_path,
+        zfill(str(int(coord.zoom)), 2), 
+        x_fill[0:3],
+        x_fill[3:6],
+        x_fill[6:9],
+        y_fill[0:3],
+        y_fill[3:6],
+    )
     return path
 
 
